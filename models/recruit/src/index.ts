@@ -846,9 +846,9 @@ export function createModel (builder: Builder): void {
     card: recruit.component.KanbanCard
   })
 
-  builder.mixin(recruit.class.Applicant, core.class.Class, view.mixin.PreviewPresenter, {
-    presenter: recruit.component.KanbanCard
-  })
+  // builder.mixin(recruit.class.Applicant, core.class.Class, view.mixin.PreviewPresenter, {
+  //   presenter: recruit.component.KanbanCard
+  // })
 
   builder.mixin(recruit.class.Applicant, core.class.Class, view.mixin.ObjectEditor, {
     editor: recruit.component.EditApplication
@@ -1048,7 +1048,8 @@ export function createModel (builder: Builder): void {
       title: recruit.string.Applications,
       query: recruit.completion.ApplicationQuery,
       context: ['search', 'mention', 'spotlight'],
-      classToSearch: recruit.class.Applicant
+      classToSearch: recruit.class.Applicant,
+      priority: 500
     },
     recruit.completion.ApplicationCategory
   )
@@ -1062,7 +1063,8 @@ export function createModel (builder: Builder): void {
       title: recruit.string.Vacancies,
       query: recruit.completion.VacancyQuery,
       context: ['search', 'mention', 'spotlight'],
-      classToSearch: recruit.class.Vacancy
+      classToSearch: recruit.class.Vacancy,
+      priority: 550
     },
     recruit.completion.VacancyCategory
   )
@@ -1438,13 +1440,15 @@ export function createModel (builder: Builder): void {
   )
 
   // Allow to use fuzzy search for mixins
-  builder.mixin(recruit.class.Vacancy, core.class.Class, core.mixin.FullTextSearchContext, {
+  builder.createDoc(core.class.FullTextSearchContext, core.space.Model, {
+    toClass: recruit.class.Vacancy,
     fullTextSummary: true,
     childProcessingAllowed: true,
     propagate: []
   })
 
-  builder.mixin(recruit.mixin.Candidate, core.class.Class, core.mixin.FullTextSearchContext, {
+  builder.createDoc(core.class.FullTextSearchContext, core.space.Model, {
+    toClass: recruit.mixin.Candidate,
     fullTextSummary: true,
     propagate: [recruit.class.Applicant],
     childProcessingAllowed: true,
@@ -1457,7 +1461,8 @@ export function createModel (builder: Builder): void {
   })
 
   // Allow to use fuzzy search for mixins
-  builder.mixin(recruit.class.Applicant, core.class.Class, core.mixin.FullTextSearchContext, {
+  builder.createDoc(core.class.FullTextSearchContext, core.space.Model, {
+    toClass: recruit.class.Applicant,
     fullTextSummary: true,
     forceIndex: true,
     childProcessingAllowed: true,

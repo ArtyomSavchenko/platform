@@ -40,15 +40,16 @@ import {
   roleOrder,
   Space,
   TypedSpace,
-  WorkspaceMode
+  WorkspaceMode,
+  type PluginConfiguration
 } from './classes'
 import core from './component'
 import { Hierarchy } from './hierarchy'
 import { TxOperations } from './operations'
 import { isPredicate } from './predicate'
-import { DocumentQuery, FindResult } from './storage'
-import { DOMAIN_TX } from './tx'
 import { Branding, BrandingMap } from './server'
+import { DocumentQuery, FindResult } from './storage'
+import { DOMAIN_TX, TxProcessor, type Tx, type TxCreateDoc, type TxCUD, type TxUpdateDoc } from './tx'
 
 function toHex (value: number, chars: number): string {
   const result = value.toString(16)
@@ -686,39 +687,48 @@ export function getFullTextIndexableAttributes (
   return result
 }
 
+const ctxKey = 'indexer_ftc'
 /**
  * @public
  */
 export function getFullTextContext (
   hierarchy: Hierarchy,
-  objectClass: Ref<Class<Doc>>
+  objectClass: Ref<Class<Doc>>,
+  contexts: Map<Ref<Class<Doc>>, FullTextSearchContext>
 ): Omit<FullTextSearchContext, keyof Class<Doc>> {
-  let objClass = hierarchy.getClass(objectClass)
-
-  while (true) {
-    if (hierarchy.hasMixin(objClass, core.mixin.FullTextSearchContext)) {
-      const ctx = hierarchy.as<Class<Doc>, FullTextSearchContext>(objClass, core.mixin.FullTextSearchContext)
+  let ctx: Omit<FullTextSearchContext, keyof Class<Doc>> | undefined = hierarchy.getClassifierProp(objectClass, ctxKey)
+  if (ctx !== undefined) {
+    return ctx
+  }
+  if (typeof ctx !== 'string') {
+    const anc = hierarchy.getAncestors(objectClass)
+    for (const oc of anc) {
+      const ctx = contexts.get(oc)
       if (ctx !== undefined) {
+        hierarchy.setClassifierProp(objectClass, ctxKey, ctx)
         return ctx
       }
     }
-    if (objClass.extends === undefined) {
-      break
-    }
-    objClass = hierarchy.getClass(objClass.extends)
   }
-  return {
+  ctx = {
+    toClass: objectClass,
     fullTextSummary: false,
     forceIndex: false,
     propagate: [],
     childProcessingAllowed: true
   }
+  hierarchy.setClassifierProp(objectClass, ctxKey, ctx)
+  return ctx
 }
 
 /**
  * @public
  */
-export function isClassIndexable (hierarchy: Hierarchy, c: Ref<Class<Doc>>): boolean {
+export function isClassIndexable (
+  hierarchy: Hierarchy,
+  c: Ref<Class<Doc>>,
+  contexts: Map<Ref<Class<Doc>>, FullTextSearchContext>
+): boolean {
   const indexed = hierarchy.getClassifierProp(c, 'class_indexed')
   if (indexed !== undefined) {
     return indexed as boolean
@@ -756,13 +766,13 @@ export function isClassIndexable (hierarchy: Hierarchy, c: Ref<Class<Doc>>): boo
 
   let result = true
 
-  if (attrs.length === 0 && !(getFullTextContext(hierarchy, c)?.forceIndex ?? false)) {
+  if (attrs.length === 0 && !(getFullTextContext(hierarchy, c, contexts)?.forceIndex ?? false)) {
     result = false
     // We need check if document has collections with indexable fields.
     const attrs = hierarchy.getAllAttributes(c).values()
     for (const attr of attrs) {
       if (attr.type._class === core.class.Collection) {
-        if (isClassIndexable(hierarchy, (attr.type as Collection<AttachedDoc>).of)) {
+        if (isClassIndexable(hierarchy, (attr.type as Collection<AttachedDoc>).of, contexts)) {
           result = true
           break
         }
@@ -825,4 +835,61 @@ export function getBranding (brandings: BrandingMap, key: string | undefined): B
   if (key === undefined) return null
 
   return Object.values(brandings).find((branding) => branding.key === key) ?? null
+}
+
+export function fillConfiguration (systemTx: Tx[], configs: Map<Ref<PluginConfiguration>, PluginConfiguration>): void {
+  for (const t of systemTx) {
+    if (t._class === core.class.TxCreateDoc) {
+      const ct = t as TxCreateDoc<Doc>
+      if (ct.objectClass === core.class.PluginConfiguration) {
+        configs.set(ct.objectId as Ref<PluginConfiguration>, TxProcessor.createDoc2Doc(ct) as PluginConfiguration)
+      }
+    } else if (t._class === core.class.TxUpdateDoc) {
+      const ut = t as TxUpdateDoc<Doc>
+      if (ut.objectClass === core.class.PluginConfiguration) {
+        const c = configs.get(ut.objectId as Ref<PluginConfiguration>)
+        if (c !== undefined) {
+          TxProcessor.updateDoc2Doc(c, ut)
+        }
+      }
+    }
+  }
+}
+
+export function pluginFilterTx (
+  excludedPlugins: PluginConfiguration[],
+  configs: Map<Ref<PluginConfiguration>, PluginConfiguration>,
+  systemTx: Tx[]
+): Tx[] {
+  const stx = toIdMap(systemTx)
+  const totalExcluded = new Set<Ref<Tx>>()
+  let msg = ''
+  for (const a of excludedPlugins) {
+    for (const c of configs.values()) {
+      if (a.pluginId === c.pluginId) {
+        for (const id of c.transactions) {
+          if (c.classFilter !== undefined) {
+            const filter = new Set(c.classFilter)
+            const tx = stx.get(id as Ref<Tx>)
+            if (
+              tx?._class === core.class.TxCreateDoc ||
+              tx?._class === core.class.TxUpdateDoc ||
+              tx?._class === core.class.TxRemoveDoc
+            ) {
+              const cud = tx as TxCUD<Doc>
+              if (filter.has(cud.objectClass)) {
+                totalExcluded.add(id as Ref<Tx>)
+              }
+            }
+          } else {
+            totalExcluded.add(id as Ref<Tx>)
+          }
+        }
+        msg += ` ${c.pluginId}:${c.transactions.length}`
+      }
+    }
+  }
+  console.log('exclude plugin', msg)
+  systemTx = systemTx.filter((t) => !totalExcluded.has(t._id))
+  return systemTx
 }

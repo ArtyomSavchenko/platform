@@ -16,7 +16,7 @@
 -->
 <script lang="ts">
   import { Analytics } from '@hcengineering/analytics'
-  import { type Space, type Class, type CollaborativeDoc, type Doc, type Ref } from '@hcengineering/core'
+  import { type Space, type Class, type CollaborativeDoc, type Doc, type Ref, generateId } from '@hcengineering/core'
   import { IntlString, translate } from '@hcengineering/platform'
   import { getFileUrl, getImageSize, imageSizeToRatio } from '@hcengineering/presentation'
   import { markupToJSON } from '@hcengineering/text'
@@ -102,7 +102,7 @@
 
   const dispatch = createEventDispatcher()
 
-  const ydoc = getContext<YDoc>(CollaborationIds.Doc) ?? new YDoc()
+  const ydoc = getContext<YDoc>(CollaborationIds.Doc) ?? new YDoc({ guid: generateId() })
   const contextProvider = getContext<Provider>(CollaborationIds.Provider)
 
   const localProvider = createLocalProvider(ydoc, collaborativeDoc)
@@ -365,15 +365,7 @@
     remoteProvider.awareness?.setLocalStateField('lastUpdate', Date.now())
   }
 
-  function parseField (collaborativeDoc: CollaborativeDoc): string | undefined {
-    if (collaborativeDoc === undefined) return undefined
-    const _id = collaborativeDoc.split(':')
-    if (_id === undefined) return undefined
-    return _id[0]?.split('%')?.[1]
-  }
-
   onMount(async () => {
-    const _field = parseField(collaborativeDoc) ?? field
     await ph
 
     editor = new Editor({
@@ -406,7 +398,7 @@
         Placeholder.configure({ placeholder: placeHolderStr }),
         Collaboration.configure({
           document: ydoc,
-          field: _field
+          field
         }),
         CollaborationCursor.configure({
           provider: remoteProvider,

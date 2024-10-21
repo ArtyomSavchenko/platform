@@ -20,7 +20,8 @@ import {
   MeasureContext,
   WorkspaceId,
   collaborativeDocParse,
-  collaborativeDocUnchain
+  collaborativeDocUnchain,
+  generateId
 } from '@hcengineering/core'
 import { Doc as YDoc } from 'yjs'
 
@@ -42,7 +43,13 @@ async function loadCollaborativeDocVersion (
   versionId: string
 ): Promise<YDoc | undefined> {
   const yContent = await ctx.with('yDocFromStorage', { type: 'content' }, async (ctx) => {
-    return await yDocFromStorage(ctx, storageAdapter, workspace, documentId, new YDoc({ gc: false }))
+    return await yDocFromStorage(
+      ctx,
+      storageAdapter,
+      workspace,
+      documentId,
+      new YDoc({ guid: generateId(), gc: false })
+    )
   })
 
   // the document does not exist
@@ -56,7 +63,7 @@ async function loadCollaborativeDocVersion (
 
   const historyDocumentId = collaborativeHistoryDocId(documentId)
   const yHistory = await ctx.with('yDocFromStorage', { type: 'history' }, async (ctx) => {
-    return await yDocFromStorage(ctx, storageAdapter, workspace, historyDocumentId, new YDoc())
+    return await yDocFromStorage(ctx, storageAdapter, workspace, historyDocumentId, new YDoc({ guid: generateId() }))
   })
 
   // the history document does not exist
@@ -71,10 +78,10 @@ async function loadCollaborativeDocVersion (
 
 /** @public */
 export async function loadCollaborativeDoc (
+  ctx: MeasureContext,
   storageAdapter: StorageAdapter,
   workspace: WorkspaceId,
-  collaborativeDoc: CollaborativeDoc,
-  ctx: MeasureContext
+  collaborativeDoc: CollaborativeDoc
 ): Promise<YDoc | undefined> {
   const sources = collaborativeDocUnchain(collaborativeDoc)
 
@@ -94,24 +101,24 @@ export async function loadCollaborativeDoc (
 
 /** @public */
 export async function saveCollaborativeDoc (
+  ctx: MeasureContext,
   storageAdapter: StorageAdapter,
   workspace: WorkspaceId,
   collaborativeDoc: CollaborativeDoc,
-  ydoc: YDoc,
-  ctx: MeasureContext
+  ydoc: YDoc
 ): Promise<void> {
   const { documentId, versionId } = collaborativeDocParse(collaborativeDoc)
-  await saveCollaborativeDocVersion(storageAdapter, workspace, documentId, versionId, ydoc, ctx)
+  await saveCollaborativeDocVersion(ctx, storageAdapter, workspace, documentId, versionId, ydoc)
 }
 
 /** @public */
 export async function saveCollaborativeDocVersion (
+  ctx: MeasureContext,
   storageAdapter: StorageAdapter,
   workspace: WorkspaceId,
   documentId: string,
   versionId: CollaborativeDocVersion,
-  ydoc: YDoc,
-  ctx: MeasureContext
+  ydoc: YDoc
 ): Promise<void> {
   await ctx.with('saveCollaborativeDoc', {}, async (ctx) => {
     if (versionId === 'HEAD') {

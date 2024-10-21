@@ -860,7 +860,8 @@ export function createModel (builder: Builder): void {
       title: contact.string.Employees,
       query: contact.completion.EmployeeQuery,
       context: ['search', 'mention'],
-      classToSearch: contact.mixin.Employee
+      classToSearch: contact.mixin.Employee,
+      priority: 1000
     },
     contact.completion.EmployeeCategory
   )
@@ -874,7 +875,8 @@ export function createModel (builder: Builder): void {
       title: contact.string.People,
       query: contact.completion.PersonQuery,
       context: ['search', 'spotlight'],
-      classToSearch: contact.class.Person
+      classToSearch: contact.class.Person,
+      priority: 900
     },
     contact.completion.PersonCategory
   )
@@ -888,7 +890,8 @@ export function createModel (builder: Builder): void {
       title: contact.string.Organizations,
       query: contact.completion.OrganizationQuery,
       context: ['search', 'mention', 'spotlight'],
-      classToSearch: contact.class.Organization
+      classToSearch: contact.class.Organization,
+      priority: 800
     },
     contact.completion.OrganizationCategory
   )
@@ -955,7 +958,8 @@ export function createModel (builder: Builder): void {
   )
 
   // Allow to use fuzzy search for mixins
-  builder.mixin(contact.class.Contact, core.class.Class, core.mixin.FullTextSearchContext, {
+  builder.createDoc(core.class.FullTextSearchContext, core.space.Model, {
+    toClass: contact.class.Contact,
     fullTextSummary: true
   })
 
